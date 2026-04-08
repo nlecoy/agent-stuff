@@ -8,5 +8,6 @@ It is released on npm as `mitsupi` for use with the [Pi](https://buildwithpi.ai/
 
 All skill files are in the [`skills`](skills) folder:
 
+* [`/clickhouse-query-log`](skills/clickhouse-query-log) - Claude Skill for analyzing ClickHouse system.query_log across multiple clusters with KPI summaries, slow-query and abusive-user investigations, and database/table-scoped analysis
 * [`/commit`](skills/commit) - Claude Skill for creating git commits using concise Conventional Commits-style subjects
 * [`/update-changelog`](skills/update-changelog) - Claude Skill for updating changelogs with notable user-facing changes
