@@ -30,6 +30,13 @@
   },
   "packageManager": "pnpm@10.29.3",
   "dependencies": {
+    "diff": "^8.0.4"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "typescript": "^6.0.3"
+  },
+  "peerDependencies": {
     "@mariozechner/pi-ai": "*",
     "@mariozechner/pi-coding-agent": "*",
     "@mariozechner/pi-tui": "*"

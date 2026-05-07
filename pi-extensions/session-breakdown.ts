@@ -20,7 +20,6 @@ import { BorderedLoader } from "@mariozechner/pi-coding-agent";
 import {
 	Key,
 	matchesKey,
-	sliceByColumn,
 	type Component,
 	type TUI,
 	truncateToWidth,
@@ -31,6 +30,42 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { createReadStream, type Dirent } from "node:fs";
 import readline from "node:readline";
+
+// Helper function to replace sliceByColumn - keeps the rightmost part of the string
+function sliceByColumn(line: string, startCol: number, length: number, strict?: boolean): string {
+	const chars = [...line];
+	let visibleCol = 0;
+	let startIndex = 0;
+	
+	// Find the start index corresponding to startCol
+	for (let i = 0; i < chars.length; i++) {
+		const charWidth = visibleWidth(chars[i]);
+		if (visibleCol + charWidth > startCol) {
+			startIndex = i;
+			break;
+		}
+		visibleCol += charWidth;
+	}
+	
+	// Now collect characters until we reach the desired length
+	let result = "";
+	let currentWidth = 0;
+	for (let i = startIndex; i < chars.length; i++) {
+		const charWidth = visibleWidth(chars[i]);
+		if (currentWidth + charWidth > length) {
+			if (strict) {
+				break;
+			} else {
+				result += chars[i];
+				break;
+			}
+		}
+		result += chars[i];
+		currentWidth += charWidth;
+	}
+	
+	return result;
+}
 
 type ModelKey = string; // `${provider}/${model}`
 type CwdKey = string; // normalized cwd path
@@ -1467,9 +1502,9 @@ class BreakdownComponent implements Component {
 		}
 		const tableLines =
 			this.view === "model" ? renderModelTable(range, metric.kind, 8)
-			: this.view === "cwd" ? renderCwdTable(range, metric.kind, 8)
-			: this.view === "dow" ? renderDowTable(range, metric.kind)
-			: renderTodTable(range, metric.kind);
+				: this.view === "cwd" ? renderCwdTable(range, metric.kind, 8)
+					: this.view === "dow" ? renderDowTable(range, metric.kind)
+						: renderTodTable(range, metric.kind);
 
 		const lines: string[] = [];
 		lines.push(truncateToWidth(header, width));
@@ -1491,8 +1526,8 @@ class BreakdownComponent implements Component {
 				const legendBlock: string[] = [];
 				const legendTitle =
 					this.view === "model" ? "Top models (30d palette):"
-					: this.view === "cwd" ? "Top directories (30d palette):"
-					: "Time of day:";
+						: this.view === "cwd" ? "Top directories (30d palette):"
+							: "Time of day:";
 				legendBlock.push(dim(legendTitle));
 				legendBlock.push(...legendItems);
 				// Fit into 7 rows (same as graph). If too many, show a final "+N more" line.
@@ -1521,8 +1556,8 @@ class BreakdownComponent implements Component {
 				// Compact legend below, left-aligned.
 				const legendTitleBelow =
 					this.view === "model" ? "Top models (30d palette):"
-					: this.view === "cwd" ? "Top directories (30d palette):"
-					: "Time of day:";
+						: this.view === "cwd" ? "Top directories (30d palette):"
+							: "Time of day:";
 				lines.push(truncateToWidth(dim(legendTitleBelow), width));
 				for (const it of legendItems) lines.push(truncateToWidth(it, width));
 			}

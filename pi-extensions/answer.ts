@@ -35,6 +35,11 @@ interface ExtractionResult {
 	questions: ExtractedQuestion[];
 }
 
+type ExtractionOutcome =
+	| { status: "ok"; result: ExtractionResult | null }
+	| { status: "cancelled" }
+	| { status: "error"; message: string };
+
 const SYSTEM_PROMPT = `You are a question extractor. Given text from a conversation, extract any questions that need answering.
 
 Output a JSON object with this structure:
@@ -160,9 +165,11 @@ class QnAComponent implements Component {
 		const editorTheme: EditorTheme = {
 			borderColor: this.dim,
 			selectList: {
-				selectedBg: (s: string) => `\x1b[44m${s}\x1b[0m`,
-				matchHighlight: this.cyan,
-				itemSecondary: this.gray,
+				selectedPrefix: (s: string) => `\x1b[44m${s}\x1b[0m`,
+				selectedText: (s: string) => `\x1b[44m${s}\x1b[0m`,
+				description: this.gray,
+				scrollInfo: this.dim,
+				noMatch: this.dim,
 			},
 		};
 
@@ -449,9 +456,9 @@ export default function (pi: ExtensionAPI) {
 			const extractionModel = await selectExtractionModel(ctx.model, ctx.modelRegistry);
 
 			// Run extraction with loader UI
-			const extractionResult = await ctx.ui.custom<ExtractionResult | null>((tui, theme, _kb, done) => {
+			const extractionOutcome = await ctx.ui.custom<ExtractionOutcome>((tui, theme, _kb, done) => {
 				const loader = new BorderedLoader(tui, theme, `Extracting questions using ${extractionModel.id}...`);
-				loader.onAbort = () => done(null);
+				loader.onAbort = () => done({ status: "cancelled" });
 
 				const doExtract = async () => {
 					const auth = await ctx.modelRegistry.getApiKeyAndHeaders(extractionModel);
@@ -483,14 +490,31 @@ export default function (pi: ExtensionAPI) {
 				};
 
 				doExtract()
-					.then(done)
-					.catch(() => done(null));
+					.then((result) => done({ status: "ok", result }))
+					.catch((error) => {
+						if (loader.signal.aborted) {
+							done({ status: "cancelled" });
+							return;
+						}
+						done({ status: "error", message: error instanceof Error ? error.message : String(error) });
+					});
 
 				return loader;
 			});
 
-			if (extractionResult === null) {
+			if (extractionOutcome.status === "cancelled") {
 				ctx.ui.notify("Cancelled", "info");
+				return;
+			}
+
+			if (extractionOutcome.status === "error") {
+				ctx.ui.notify(`Failed to extract questions: ${extractionOutcome.message}`, "error");
+				return;
+			}
+
+			const extractionResult = extractionOutcome.result;
+			if (extractionResult === null) {
+				ctx.ui.notify("Failed to extract questions: model response was not valid JSON", "error");
 				return;
 			}
 

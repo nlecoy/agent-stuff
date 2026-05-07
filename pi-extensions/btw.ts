@@ -1,7 +1,7 @@
 import {
 	buildSessionContext,
-	codingTools,
 	createAgentSession,
+	createCodingTools,
 	createExtensionRuntime,
 	getMarkdownTheme,
 	SessionManager,
@@ -143,7 +143,11 @@ function buildSeedMessages(ctx: ExtensionContext, thread: BtwDetails[]): Message
 
 	try {
 		const contextMessages = buildSessionContext(ctx.sessionManager.getEntries(), ctx.sessionManager.getLeafId()).messages;
-		seed.push(...contextMessages);
+		// Filter to only valid Message types (UserMessage | AssistantMessage)
+		const validMessages = contextMessages.filter((msg): msg is Message => {
+			return msg.role === "user" || msg.role === "assistant";
+		});
+		seed.push(...validMessages);
 	} catch {
 		// Ignore context seed failures and continue with an empty side thread.
 	}
@@ -154,7 +158,7 @@ function buildSeedMessages(ctx: ExtensionContext, thread: BtwDetails[]): Message
 				role: "user",
 				content: [{ type: "text", text: item.question }],
 				timestamp: item.timestamp,
-			},
+			} as Message,
 			{
 				role: "assistant",
 				content: [{ type: "text", text: item.answer }],
@@ -173,7 +177,7 @@ function buildSeedMessages(ctx: ExtensionContext, thread: BtwDetails[]): Message
 					},
 				stopReason: "stop",
 				timestamp: item.timestamp,
-			},
+			} as AssistantMessage,
 		);
 	}
 
@@ -241,7 +245,7 @@ class BtwOverlay extends Container implements Focusable {
 	}
 
 	handleInput(data: string): void {
-		if (this.keybindings.matches(data, "selectCancel")) {
+		if (this.keybindings.matches(data, "tui.select.cancel")) {
 			this.onDismissCallback();
 			return;
 		}
@@ -560,13 +564,16 @@ export default function (pi: ExtensionAPI) {
 			model: ctx.model,
 			modelRegistry: ctx.modelRegistry as AgentSession["modelRegistry"],
 			thinkingLevel: pi.getThinkingLevel() as SessionThinkingLevel,
-			tools: codingTools,
+			tools: createCodingTools(process.cwd()).map(t => t.name),
 			resourceLoader: createBtwResourceLoader(ctx),
 		});
 
 		const seedMessages = buildSeedMessages(ctx, thread);
 		if (seedMessages.length > 0) {
-			session.agent.replaceMessages(seedMessages as typeof session.state.messages);
+			// Set initial messages via session manager
+			for (const msg of seedMessages) {
+				session.sessionManager.appendMessage(msg as any);
+			}
 		}
 
 		const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
@@ -948,15 +955,13 @@ export default function (pi: ExtensionAPI) {
 		await restoreThread(ctx);
 	});
 
-	pi.on("session_switch", async (_event, ctx) => {
+	pi.on("session_before_switch", async (_event: { reason: string; targetSessionFile?: string }, ctx: ExtensionContext) => {
 		await restoreThread(ctx);
 	});
 
-	pi.on("session_tree", async (_event, ctx) => {
-		await restoreThread(ctx);
-	});
 
-	pi.on("session_shutdown", async () => {
+
+	pi.on("session_shutdown", async (_event: { reason: string; targetSessionFile?: string }, _ctx: ExtensionContext) => {
 		await disposeSideSession();
 		dismissOverlay();
 	});
